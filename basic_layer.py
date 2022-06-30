@@ -15,8 +15,11 @@ class TypeInference(nn.Module):
     dtype:      output dimensionality
     acitv:      type of activation function in mlp
     '''
-    def __init__(self, n_channels, mlp_depth, mlp_width, dtype, activ=nn.GELU) -> None:
+    def __init__(self, n_channels, mlp_depth, mlp_width, dtype, activ=nn.GELU, tau=1.6) -> None:
         super().__init__()
+        self.tau = tau
+        self.register_parameter('sigma', nn.Parameter(torch.rand(1)))
+
         net = \
         [
             [
@@ -40,7 +43,25 @@ class TypeInference(nn.Module):
         self.mlp = nn.Sequential(*net)
 
     def forward(self, x):
+        '''
+        type-inference network
+        '''
         return self.mlp(x)
+    
+    def type_match(self, S, X):
+        '''
+        inputs:
+            S:  (#funcs, #dtype)
+            X:  (#tokens, #dtype)
+        returns:
+            C:  compatibility matrix of dim (#funcs, #tokens)
+        '''
+        T = self.forward(X) # (#tokens, #dtype)
+        D = 1-torch.matmul(S, T.T) # (#funcs, #dtype)*(#dtype, #tokens) => (#funcs, #tokens)
+        M = D>self.tau # mask signals less than tau => sparsity
+        C_hat = torch.exp(-D/self.sigma)*M
+        C = C_hat /(torch.sum(C_hat,dim=1,keepdim=True)+1e-4)
+        return C
 
 class ModLin(nn.Module):
     '''
@@ -60,6 +81,18 @@ class ModLin(nn.Module):
         out = x*out
         out = torch.matmul(self.W,out)+self.b
         return out
+
+class ModMLP(nn.Module):
+    '''
+    n_layers:   number of stacked ModLin blocks
+    code:       code vector for each ModLin block => share same code
+    '''
+    def __init__(self, n_layers, code, dout, din, dcond, activ=nn.GELU) -> None:
+        super().__init__()
+        
+        self.modlin_blocks = \
+            [ModLin()]
+    def forward(self, x):
 
 class FuncBlock(nn.Module):
     '''
