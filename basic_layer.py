@@ -43,11 +43,23 @@ class TypeInference(nn.Module):
         return self.mlp(x)
 
 class ModLin(nn.Module):
-    def __init__(self) -> None:
+    '''
+    code:   embedding of dim dcond st. what function should do
+
+    '''
+    def __init__(self, code, dout, din, dcond, ) -> None:
         super().__init__()
+        self.c = code
+        self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
+        self.register_parameter('b', nn.Parameter(torch.empty(dout)))
+        self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
+        self.norm = torch.nn.LayerNorm(din)
 
     def forward(self, x):
-        return None
+        out = self.norm(torch.matmul(self.w_c, self.c))
+        out = x*out
+        out = torch.matmul(self.W,out)+self.b
+        return out
 
 class FuncBlock(nn.Module):
     '''
