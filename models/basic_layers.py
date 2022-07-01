@@ -106,6 +106,7 @@ class TypeMatching(nn.Module):
       s [Tensor(F x S)]
     
     Attributes:
+    -----------
       t [Tensor(B x N x S)]
       compatilibity_score [Tensor(B x F x N)]: Parallelized computation score of compatibility score. F stands for # Functions.
       compatilibity_hat   [Tensor(B x F x N)]: Negative exponentiated version of compatibility score
@@ -123,25 +124,45 @@ class TypeMatching(nn.Module):
     distance = (1 - t @ s.transpose(0, 1))
     return torch.where(distance > self.treshold, torch.exp(-distance/self.sigma), torch.tensor(0, dtype=torch.float)).transpose(1, 2)
 
+  
 class ModLin(nn.Module):
     '''
-    code:   embedding of dim dcond st. what function should do
+    Linear Layer conditioned by `code` vector. 
+    
+    Args:
+    ----
+      code  [Tensor(dcond x 1)]: Code vector of a `function`.
+      dout  [int]: Dimension of the output of the projection.
+      din   [int]: Dimension of the input  of the projection.
+      dcond [int]: Dimension of the code vector.
+    
+    Attributes:
+    -----------
+      W_c [Tensor(din x dcond)]: Projection matrix of condition vector
+      b   [Tensor(dout)]:        bias vector 
+      W   [Tensor(dout x din)]:  Projection matrix of conditioned vector
+
     '''
-    def __init__(self, code, dout, din, dcond) -> None:
-        super().__init__()
-        self.c = code
-        # initialization => xavier replace
-        self.register_parameter('w_c', nn.Parameter(torch.rand(din, dcond)))
-        self.register_parameter('b', nn.Parameter(torch.rand(dout)))
-        self.register_parameter('W', nn.Parameter(torch.rand(dout, din)))
-        self.norm = torch.nn.LayerNorm(din)
+    def __init__(self, code, dout, din, dcond):
+      super().__init__()
+      self.c = code
+      self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
+      self.register_parameter('b', nn.Parameter(torch.empty(dout)))
+      self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
+      self.norm = torch.nn.LayerNorm(din)
 
     def forward(self, x):
-        out = self.norm(torch.matmul(self.w_c, self.c))
-        out = x*out
-        out = torch.matmul(out, self.W.T)+self.b
-        return out
+      '''
+      Performs linear projection of embeddings in `din` dimensional space onto
+      `dout` dimensional space by fusing [conditioning] embeddings [x] with normalized `code`
+      vectors.
+      '''  
+      out = self.norm(torch.matmul(self.w_c, self.c))
+      out = x * out
+      out = torch.matmul(out, self.W.transpose(0, 1))+self.b
+      return out
 
+    
 class ModMLP(nn.Module):
   '''
   n_layers:   number of stacked ModLin blocks
