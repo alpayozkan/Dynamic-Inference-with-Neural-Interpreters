@@ -1,3 +1,4 @@
+from heapq import nlargest
 import torch
 import torch.nn as nn
 
@@ -91,10 +92,10 @@ class TypeMatching(nn.Module):
     2. Compute `Compatibility`
     3. If this compatibility is larger than treshold, permit f_u to access x_i.
   '''
-  def __init__(self, in_features, hidden_features, mlp_depth, out_features, treshold):
+  def __init__(self, in_features, hidden_features, out_features, treshold):
     super().__init__()
     self.treshold = treshold
-    self.type_inference = MLP(in_features, hidden_features, mlp_depth, out_features)
+    self.type_inference = MLP(in_features, hidden_features, out_features)
     self.register_parameter('sigma', nn.Parameter(torch.ones(1)))
 
   def forward(self, x, s):
@@ -126,16 +127,35 @@ class ModLin(nn.Module):
     '''
     code:   embedding of dim dcond st. what function should do
     '''
-    def __init__(self, code, dout, din, dcond, ) -> None:
+    def __init__(self, code, dout, din, dcond) -> None:
         super().__init__()
         self.c = code
-        self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
-        self.register_parameter('b', nn.Parameter(torch.empty(dout)))
-        self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
+        # initialization => xavier replace
+        self.register_parameter('w_c', nn.Parameter(torch.rand(din, dcond)))
+        self.register_parameter('b', nn.Parameter(torch.rand(dout)))
+        self.register_parameter('W', nn.Parameter(torch.rand(dout, din)))
         self.norm = torch.nn.LayerNorm(din)
 
     def forward(self, x):
         out = self.norm(torch.matmul(self.w_c, self.c))
         out = x*out
-        out = torch.matmul(self.W,out)+self.b
+        out = torch.matmul(out, self.W.T)+self.b
         return out
+
+class ModMLP(nn.Module):
+  '''
+  n_layers:   number of stacked ModLin blocks
+  code:       code vector for each ModLin block => share same code
+  '''
+  def __init__(self, n_layers, code, dout, din, dcond, activ=nn.GELU) -> None:
+      super().__init__()
+      
+      self.modlin_blocks = [ModLin(code, dout, din, dcond, activ), activ()]
+      for i in range(n_layers-1):
+        self.modlin_blocks.append(ModLin(code, dout, dout, dcond))
+        self.modlin_blocks.append(activ())
+      self.modlin_blocks = nn.Sequential(*self.modlin_blocks)
+  
+  def forward(self, x):
+      out = self.modlin_blocks(x)
+      return out
