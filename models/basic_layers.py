@@ -129,8 +129,13 @@ class TypeMatching(nn.Module):
     t = self.type_inference(x)
     compatibility_score = self.get_compatilibity_score(t, s).transpose(1, 2)
     compatibility_hat = torch.exp(-compatibility_score / self.sigma)
-    return compatibility_hat
+    
+    compatibility_norm = compatibility_hat.sum(dim=1).unsqueeze(1)+1e-5
+    compatibility = torch.div(compatibility_hat, compatibility_norm)
+    
+    return compatibility
 
   def get_compatilibity_score(self, t, s):
     distance = (1 - t @ s.transpose(0, 1))
+    # differentiability ?
     return torch.where(distance > self.treshold, distance, torch.tensor(0, dtype=torch.float))
