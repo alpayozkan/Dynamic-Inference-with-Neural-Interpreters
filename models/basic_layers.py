@@ -161,7 +161,45 @@ class ModLin(nn.Module):
       out = torch.matmul(out, self.W.transpose(0, 1))+self.b
       return out
 
+
+class ModLin2D(nn.Module):
+    '''
+    2D implementation of ModLin: instead of `code` vector, operated on `code` matrix. Used in ModAttention.
+
+    Args:
+    ----
+      code  [Tensor(dcond x nf)]: Code matrix of a all `function`s.
+      dout  [int]: Dimension of the output of the projection.
+      din   [int]: Dimension of the input  of the projection.
+      dcond [int]: Dimension of the code vector.
     
+    Attributes:
+    -----------
+      W_c [Tensor(din x dcond)]: Projection matrix of condition vector
+      b   [Tensor(dout)]:        bias vector 
+      W   [Tensor(dout x din)]:  Projection matrix of conditioned vector
+
+    '''
+    def __init__(self, code, dout, din, dcond):
+      super().__init__()
+      self.c = code
+      self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
+      self.register_parameter('b', nn.Parameter(torch.empty(dout)))
+      self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
+      self.norm = nn.LayerNorm(din)
+
+    def forward(self, x):
+      '''
+      Performs linear projection of embeddings in `din` dimensional space onto
+      `dout` dimensional space by fusing [conditioning] embeddings [x] with normalized `code`
+      vectors.
+      '''  
+      out = self.norm(torch.matmul(self.w_c, self.c).T).unsqueeze(1)
+      out = x.unsqueeze(1) * out
+      out = torch.matmul(out, self.W.transpose(0, 1))+self.b
+      return out
+   
+  
 class ModMLP(nn.Module):
   '''
   Combination of ModLin Layers with the GELU activation function.
@@ -192,3 +230,37 @@ class ModMLP(nn.Module):
   def forward(self, x):
       out = self.modlin_blocks(x)
       return out
+
+
+class ModAttn(nn.Module):
+  '''
+  Self-Attention Module that uses ModLin2D layer for constructing Q, K, V matrices.
+  
+  Args:
+  ----
+    code_matrix [Tensor(dcond x nf)]: Consists of code vectors associated with each `function`
+    din         [int]:   Dimension of Embeddings
+    dcond       [int]:   Dimension of individual code vectors associated with each function
+    n_heads     [int]:   Number of attention heads 
+    attn_prob   [float]: Dropout probability 
+  '''
+  def __init__(self, code_matrix, din, dcond, n_heads, attn_prob = 0.0):
+    super().__init__()
+    self.C = code_matrix
+    self.qkv = ModLin2D(code, 3 * din, din, dcond)
+    self.n_heads = n_heads
+    self.head_dim = din // n_heads
+    self.scale = self.head_dim ** -0.5
+
+  def forward(self, x):
+    B, N, E = x.shape
+    # [768, 128, 5, 64]
+    qkv = self.qkv(x).permute(3, 0, 1, 2)
+    qkv = qkv.view(3, self.n_heads, self.head_dim, B, -1, N) 
+    qkv = qkv.permute(0, 3, 1, 4, 5, 2)
+    # B x Heads x nf x tokens x token_dim
+    q, k, v = qkv[0], qkv[1], qkv[2]
+    qk_t = (q @ k.transpose(-2, -1)) * self.scale
+    attn = qk_t.softmax(dim=-1)
+    # DONT FORGET TO SCALE WITH C_ui . C_uj
+    return attn.size()
