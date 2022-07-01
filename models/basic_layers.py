@@ -95,7 +95,7 @@ class TypeMatching(nn.Module):
     super().__init__()
     self.treshold = treshold
     self.type_inference = MLP(in_features, hidden_features, mlp_depth, out_features)
-    self.sigma = nn.Parameter(torch.ones(1))
+    self.register_parameter('sigma', nn.Parameter(torch.ones(1)))
 
   def forward(self, x, s):
     '''
