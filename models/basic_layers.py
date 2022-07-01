@@ -150,7 +150,7 @@ class ModMLP(nn.Module):
   def __init__(self, n_layers, code, dout, din, dcond, activ=nn.GELU) -> None:
       super().__init__()
       
-      self.modlin_blocks = [ModLin(code, dout, din, dcond, activ), activ()]
+      self.modlin_blocks = [ModLin(code, dout, din, dcond), activ()]
       for i in range(n_layers-1):
         self.modlin_blocks.append(ModLin(code, dout, dout, dcond))
         self.modlin_blocks.append(activ())
