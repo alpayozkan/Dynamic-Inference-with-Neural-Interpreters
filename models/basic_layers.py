@@ -53,37 +53,20 @@ class MLP(nn.Module):
   Args:
   ----
     in_features     [int]: Dimension of input features and output features
-    hidden_features [int]: Dimension of intermediate features which corresponds to mlp_width in the paper
-    mlp_depth       [int]: Number of mlp-layers as mentioned in the paper
-    out_features    [int]: Dimension of the signature which is dtype as in the paper
-    activ           [nn.module]: Activation function, default GELU mentioned in the paper
+    hidden_features [int]: Dimension of intermediate features
+    out_features    [int]: Dimension of the signature
+    
   Returns:
   -------
     t [Tensor()]: Type vector
   '''
-  def __init__(self, in_features, hidden_features, mlp_depth, out_features, activ=nn.GELU):
+  def __init__(self, in_features, hidden_features, out_features):
     super().__init__()
-    net = \
-        [
-            [
-                nn.Linear(in_features, hidden_features),
-                activ(),
-            ]
-        ] + \
-        [
-            [
-                nn.Linear(hidden_features, hidden_features),
-                activ(),
-            ]   for i in range(mlp_depth-1)
-        ] + \
-        [
-            [
-                nn.Linear(hidden_features, out_features),
-            ]
-        ]
-
-    net = sum(net, [])
-    self.net = nn.Sequential(*net)
+    self.net = nn.Sequential(
+              nn.Linear(in_features, hidden_features),
+              nn.GELU(),
+              nn.Linear(hidden_features, out_features)
+              )
 
   def forward(self, embeddings):
     '''
