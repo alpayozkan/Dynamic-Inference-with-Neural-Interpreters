@@ -110,15 +110,32 @@ class TypeMatching(nn.Module):
       compatilibity_hat   [Tensor(B x F x N)]: Negative exponentiated version of compatibility score
     '''
     t = self.type_inference(x)
-    compatibility_score = self.get_compatilibity_score(t, s).transpose(1, 2)
-    compatibility_hat = torch.exp(-compatibility_score / self.sigma)
+    compatibility_hat = self.get_compatilibity_score(t, s)
     
-    compatibility_norm = compatibility_hat.sum(dim=1).unsqueeze(1)+1e-5
+    # Softmax 
+    compatibility_norm = compatibility_hat.sum(dim=1).unsqueeze(1) + 1e-5
     compatibility = torch.div(compatibility_hat, compatibility_norm)
     
     return compatibility
 
   def get_compatilibity_score(self, t, s):
     distance = (1 - t @ s.transpose(0, 1))
-    # differentiability ?
-    return torch.where(distance > self.treshold, distance, torch.tensor(0, dtype=torch.float))
+    return torch.where(distance > self.treshold, torch.exp(-distance/self.sigma), torch.tensor(0, dtype=torch.float)).transpose(1, 2)
+
+class ModLin(nn.Module):
+    '''
+    code:   embedding of dim dcond st. what function should do
+    '''
+    def __init__(self, code, dout, din, dcond, ) -> None:
+        super().__init__()
+        self.c = code
+        self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
+        self.register_parameter('b', nn.Parameter(torch.empty(dout)))
+        self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
+        self.norm = torch.nn.LayerNorm(din)
+
+    def forward(self, x):
+        out = self.norm(torch.matmul(self.w_c, self.c))
+        out = x*out
+        out = torch.matmul(self.W,out)+self.b
+        return out
