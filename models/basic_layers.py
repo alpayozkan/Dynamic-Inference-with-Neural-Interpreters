@@ -1,4 +1,3 @@
-from heapq import nlargest
 import torch
 import torch.nn as nn
 
@@ -165,16 +164,29 @@ class ModLin(nn.Module):
     
 class ModMLP(nn.Module):
   '''
-  n_layers:   number of stacked ModLin blocks
-  code:       code vector for each ModLin block => share same code
+  Combination of ModLin Layers with the GELU activation function.
+
+  Args:
+  ----
+    n_layers [int]: Number of ModLin layers
+    code     [Tensor(dcond x 1)]: Code vector of a `function`.
+    dout     [int]: Dimension of the output projection
+    din      [int]: Dimension of the input  projection
+    dcond    [int]: Dimension of the code vector
+    activ    [nn.Module]: Activation function applied after every ModLin Layer
+  
+  Attributes:
+  -----------
+    modlin_blocks [List[ModLin]]: Stack of ModLin layers 
   '''
-  def __init__(self, n_layers, code, dout, din, dcond, activ=nn.GELU) -> None:
+  def __init__(self, n_layers, code, dout, din, dcond, activ=nn.GELU):
       super().__init__()
-      
       self.modlin_blocks = [ModLin(code, dout, din, dcond), activ()]
+      
       for i in range(n_layers-1):
         self.modlin_blocks.append(ModLin(code, dout, dout, dcond))
         self.modlin_blocks.append(activ())
+     
       self.modlin_blocks = nn.Sequential(*self.modlin_blocks)
   
   def forward(self, x):
