@@ -1,3 +1,4 @@
+from turtle import forward
 import torch
 import torch.nn as nn
 
@@ -18,7 +19,7 @@ class PatchEmbedding(nn.Module):
     projection  [Conv]: Patch extractor
   '''
 
-  def __init__(self, img_size, patch_size, in_channels, embed_dim, n_cls):
+  def __init__(self, img_size, patch_size, in_channels, embed_dim):
     super().__init__()
     self.img_size = img_size
     self.patch_size = patch_size
@@ -30,9 +31,6 @@ class PatchEmbedding(nn.Module):
                                 out_channels = embed_dim, 
                                 kernel_size = patch_size, 
                                 stride = patch_size)
-    
-    self.cls_tokens = nn.Parameter(torch.zeros(1, n_cls, embed_dim))
-    self.pos_embed = nn.Parameter(torch.zeros(1, n_cls + self.n_patches, embed_dim))
   
   def forward(self, x):
     '''
@@ -42,14 +40,10 @@ class PatchEmbedding(nn.Module):
     
     Returns:
     --------
-      projected [Tensor(B x N + CLS x E)] where N + CLS stands for n_patches + cls tokens & E stands for embed_dim
+      projected [Tensor(B x N x E)] where N stands for n_patches & E stands for embed_dim
     '''
-    batch_size = x.size(0)
-    x = self.projection(x).flatten(2).transpose(1, 2) 
-    cls_tokens = self.cls_tokens.expand(batch_size, -1, -1)
-    x = torch.cat((cls_tokens, x), dim=1)
-    x = x + self.pos_embed
-    return x
+    projected = self.projection(x).flatten(2).transpose(1, 2) 
+    return projected
 
 
   
@@ -98,11 +92,11 @@ class TypeMatching(nn.Module):
     2. Compute `Compatibility`
     3. If this compatibility is larger than treshold, permit f_u to access x_i.
   '''
-  def __init__(self, in_features, hidden_features, out_features, treshold, signature_matrix):
+  def __init__(self, type_inference, funcSign, threshold):
     super().__init__()
-    self.s = signature_matrix
-    self.treshold = treshold
-    self.type_inference = MLP(in_features, hidden_features, out_features)
+    self.s = funcSign
+    self.threshold = threshold
+    self.type_inference = type_inference
     self.register_parameter('sigma', nn.Parameter(torch.ones(1)))
 
   def forward(self, x):
@@ -129,45 +123,7 @@ class TypeMatching(nn.Module):
 
   def get_compatilibity_score(self, t, s):
     distance = (1 - t @ s.transpose(0, 1))
-    return torch.where(distance > self.treshold, torch.exp(-distance/self.sigma), torch.tensor(0, dtype=torch.float)).transpose(1, 2)
-
-  
-class ModLin(nn.Module):
-    '''
-    Linear Layer conditioned by `code` vector. 
-    
-    Args:
-    ----
-      code  [Tensor(dcond x 1)]: Code vector of a `function`.
-      dout  [int]: Dimension of the output of the projection.
-      din   [int]: Dimension of the input  of the projection.
-      dcond [int]: Dimension of the code vector.
-    
-    Attributes:
-    -----------
-      W_c [Tensor(din x dcond)]: Projection matrix of condition vector
-      b   [Tensor(dout)]:        bias vector 
-      W   [Tensor(dout x din)]:  Projection matrix of conditioned vector
-
-    '''
-    def __init__(self, code, dout, din, dcond):
-      super().__init__()
-      self.c = code
-      self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
-      self.register_parameter('b', nn.Parameter(torch.empty(dout)))
-      self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
-      self.norm = torch.nn.LayerNorm(din)
-
-    def forward(self, x):
-      '''
-      Performs linear projection of embeddings in `din` dimensional space onto
-      `dout` dimensional space by fusing [conditioning] embeddings [x] with normalized `code`
-      vectors.
-      '''  
-      out = self.norm(torch.matmul(self.w_c, self.c))
-      out = x * out
-      out = torch.matmul(out, self.W.transpose(0, 1))+self.b
-      return out
+    return torch.where(distance > self.threshold, torch.exp(-distance/self.sigma), torch.tensor(0, dtype=torch.float)).transpose(1, 2)
 
 
 class ModLin2D(nn.Module):
@@ -188,12 +144,19 @@ class ModLin2D(nn.Module):
       W   [Tensor(dout x din)]:  Projection matrix of conditioned vector
 
     '''
-    def __init__(self, code, dout, din, dcond):
+    def __init__(self, code, dout, din, dcond, w_c, W, b):
       super().__init__()
       self.c = code
-      self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
-      self.register_parameter('b', nn.Parameter(torch.empty(dout)))
-      self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
+      
+      self.w_c = w_c
+      # self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
+      
+      # interpreter
+      self.b = b
+      self.W = W
+      # self.register_parameter('b', nn.Parameter(torch.empty(dout)))
+      # self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
+      
       self.norm = nn.LayerNorm(din)
 
     def forward(self, x):
@@ -225,12 +188,12 @@ class ModMLP(nn.Module):
   -----------
     modlin_blocks [List[ModLin]]: Stack of ModLin layers 
   '''
-  def __init__(self, mlp_depth, code, dout, din, dcond, activ=nn.GELU):
+  def __init__(self, mlp_depth, code, dout, din, dcond, w_c, W, b, activ=nn.GELU):
       super().__init__()
-      self.modlin_blocks = [ModLin2D(code, dout, din, dcond), activ()]
+      self.modlin_blocks = [ModLin2D(code, dout, din, dcond, w_c, W, b), activ()]
       
       for i in range(mlp_depth-1):
-        self.modlin_blocks.append(ModLin2D(code, dout, dout, dcond))
+        self.modlin_blocks.append(ModLin2D(code, dout, dout, dcond, w_c, W, b))
         self.modlin_blocks.append(activ())
      
       self.modlin_blocks = nn.Sequential(*self.modlin_blocks)
@@ -263,14 +226,15 @@ class ModAttn(nn.Module):
   --------
     y: Tensor of size [B x nf x n_token x din]
   '''
-  def __init__(self, code_matrix, din, dcond, n_heads, attn_prob = 0.0, proj_prob = 0.0):
+  def __init__(self,  code_matrix, din, dcond, n_heads, w_c, W, b, W_qkv, b_qkv, 
+                      attn_prob = 0.0, proj_prob = 0.0):
     super().__init__()
     self.C = code_matrix
-    self.qkv = ModLin2D(code_matrix, 3 * din, din, dcond)
+    self.qkv = ModLin2D(code_matrix, 3 * din, din, dcond, w_c, W_qkv, b_qkv)
     self.n_heads = n_heads
     self.head_dim = din // n_heads
     self.scale = self.head_dim ** -0.5
-    self.proj = ModLin2D(code_matrix, din, din, dcond)
+    self.proj = ModLin2D(code_matrix, din, din, dcond, w_c, W, b)
     self.attn_drop = nn.Dropout(attn_prob)
     self.proj_drop = nn.Dropout(proj_prob)
     # code, dout, din, dcond
@@ -303,7 +267,8 @@ class LOC(nn.Module):
   Line of Code Layer
   Composed of 1 attention + 1 MLP layers
   '''
-  def __init__(self, code_matrix, din, dcond, n_heads, mlp_depth, typematch, attn_prob=0, proj_prob=0):
+  def __init__( self, code_matrix, din, dcond, n_heads, mlp_depth, typematch, w_c, W, b, W_qkv, b_qkv,
+                attn_prob=0, proj_prob=0) -> None:
 
     super().__init__()
 
@@ -311,8 +276,11 @@ class LOC(nn.Module):
     self.norm1 = torch.nn.LayerNorm(din)
     self.norm2 = torch.nn.LayerNorm(din)
 
-    self.modattn = ModAttn(code_matrix, din, dcond, n_heads, attn_prob, proj_prob)
-    self.modmlp = ModMLP(mlp_depth, code_matrix, din, din, dcond)
+    self.modattn = ModAttn( code_matrix, din, dcond, n_heads, 
+                            w_c, W, b, W_qkv, b_qkv,
+                            attn_prob, proj_prob)
+    self.modmlp = ModMLP( mlp_depth, code_matrix, din, din, dcond,
+                          w_c, W, b)
 
   def forward(self, x):
     compat_matrix = self.typematch(x)
@@ -352,20 +320,61 @@ class Script(nn.Module):
     attn_prob   [float]: Drop-out rate
     proj_prob   [float]: Drop-out rate
   '''
-
-  def __init__(self, ni, nf, code_matrix, din, dcond, n_heads, mlp_depth, typematch, attn_prob=0, proj_prob=0):
+  
+  def __init__( self, ni, nf, din, dcond, n_heads, mlp_depth, 
+                type_inference, threshold, code_dim, signature_dim,
+                W, b, W_qkv, b_qkv,
+                attn_prob=0, proj_prob=0) -> None:
     super().__init__()
     
-    self.LOC_blocks = []
+    # w_c shared among all functions in a script  
+    self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
+    
+    self.register_parameter('funcsign_matrix', nn.Parameter(torch.empty(nf, signature_dim)))
+    self.register_parameter('code_matrix', nn.Parameter(torch.empty(code_dim, nf)))
+
+    self.typematch = TypeMatching(type_inference, self.funcsign_matrix, threshold)
+
+    self.locBlocks = []
     for i in range(ni):
       # add LOC layer
-      self.LOC_blocks.append(LOC(code_matrix, din, dcond, n_heads, mlp_depth, typematch))
+      self.locBlocks.append(LOC(self.code_matrix, din, dcond, n_heads, mlp_depth, self.typematch, 
+                                self.w_c, W, b, W_qkv, b_qkv, attn_prob, proj_prob))
       
-    self.LOC_blocks = nn.Sequential(*self.LOC_blocks)
+    self.locBlocks = nn.Sequential(*self.locBlocks)
   
   def forward(self, x):
-    x = self.LOC_blocks(x)
+    x = self.locBlocks(x)
     return x
     
 
-# class NeuralInterpreter()
+class NeuralInterpreter(nn.Module):
+  def __init__( self, ns, ni, nf, din, dcond, mlp_depth, nheads,
+                type_inference_width, signature_dim, threshold,  # typematch params
+                code_dim, 
+                attn_prob=0, proj_prob=0, # dropout rate for attention block
+              ) -> None:
+    super().__init__()
+    # Function definition: f = (s,c)
+    # function signature matrix (can be kept fixed or can be learnt, but warning collapse problem
+
+    # interpreter that is shared among the whole architecture
+    # 2 separate interpreters: din->din, din->3.din (qkv attn)
+    self.register_parameter('W', nn.Parameter(torch.empty(din, din)))
+    self.register_parameter('b', nn.Parameter(torch.empty(din)))
+    self.register_parameter('W_qkv', nn.Parameter(torch.empty(3*din, din)))
+    self.register_parameter('b_qkv', nn.Parameter(torch.empty(3*din)))
+
+    # type inference 
+    self.type_inference = MLP(din, type_inference_width, signature_dim)
+
+    self.scriptBlocks = []
+    for i in range(ns):
+      self.scriptBlocks.append(Script(ni, nf, din, dcond, nheads, 
+                                      mlp_depth, self.type_inference, threshold, code_dim, signature_dim,
+                                      self.W, self.b, self.W_qkv, self.b_qkv,
+                                      attn_prob, proj_prob))
+    self.scriptBlocks = nn.Sequential(*self.scriptBlocks)
+
+  def forward(self, x):
+    return self.scriptBlocks(x)
