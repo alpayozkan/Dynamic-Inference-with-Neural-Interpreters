@@ -195,11 +195,8 @@ class ModLin2D(nn.Module):
       vectors.
       '''  
       out = self.norm(torch.matmul(self.w_c, self.c).T).unsqueeze(1)
-      print(out.shape)
-      out = x.unsqueeze(1) * out
-      print(out.shape)
+      out = x * out
       out = torch.matmul(out, self.W.transpose(0, 1))+self.b
-      print(out.shape)
       return out
    
   
@@ -222,10 +219,10 @@ class ModMLP(nn.Module):
   '''
   def __init__(self, n_layers, code, dout, din, dcond, activ=nn.GELU):
       super().__init__()
-      self.modlin_blocks = [ModLin(code, dout, din, dcond), activ()]
+      self.modlin_blocks = [ModLin2D(code, dout, din, dcond), activ()]
       
       for i in range(n_layers-1):
-        self.modlin_blocks.append(ModLin(code, dout, dout, dcond))
+        self.modlin_blocks.append(ModLin2D(code, dout, dout, dcond))
         self.modlin_blocks.append(activ())
      
       self.modlin_blocks = nn.Sequential(*self.modlin_blocks)
@@ -273,7 +270,7 @@ class ModAttn(nn.Module):
   def forward(self, x, compatibility):
     B, N, E = x.shape
     # [768, 128, 5, 64]
-    qkv = self.qkv(x).permute(3, 0, 1, 2)
+    qkv = self.qkv(x.unsqueeze(1)).permute(3, 0, 1, 2)
     qkv = qkv.view(3, self.n_heads, self.head_dim, B, -1, N) # 3 x 4 x 256 x 128 x 5 x 64
     qkv = qkv.permute(0, 3, 1, 4, 5, 2)
     # B x Heads x nf x tokens x token_dim
