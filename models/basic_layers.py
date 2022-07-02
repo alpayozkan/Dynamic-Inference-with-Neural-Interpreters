@@ -91,9 +91,9 @@ class TypeMatching(nn.Module):
     2. Compute `Compatibility`
     3. If this compatibility is larger than treshold, permit f_u to access x_i.
   '''
-  def __init__(self, in_features, hidden_features, out_features, treshold, funcSign):
+  def __init__(self, in_features, hidden_features, out_features, treshold, signature_matrix):
     super().__init__()
-    self.s = funcSign
+    self.s = signature_matrix
     self.treshold = treshold
     self.type_inference = MLP(in_features, hidden_features, out_features)
     self.register_parameter('sigma', nn.Parameter(torch.ones(1)))
@@ -296,7 +296,7 @@ class LOC(nn.Module):
   Line of Code Layer
   Composed of 1 attention + 1 MLP layers
   '''
-  def __init__(self, code_matrix, din, dcond, n_heads, mlp_depth, typematch, attn_prob=0, proj_prob=0) -> None:
+  def __init__(self, code_matrix, din, dcond, n_heads, mlp_depth, typematch, attn_prob=0, proj_prob=0):
 
     super().__init__()
 
@@ -327,24 +327,38 @@ class LOC(nn.Module):
 class Script(nn.Module):
   '''
   Script blocks composed of LOC blocks
+  
   Assumption:
+  -----------
     LOC is composed of 1 layer.
-  ni: number of function iterations in a script
-  nf: number of functions per iteration
+  
+  Args:
+  -----
+    ni          [int]: Number of function iterations in a script
+    nf          [int]: Number of functions per iteration
+    code_matrix [Tensor(dcond x nf)]: Code matrix of a all `function`s.
+    din         [int]: Dimension of the input  projection
+    dcond       [int]: Dimension of the code vector
+    n_heads     [int]: Number of attention heads
+    mlp_depth   [int]: Number of MLP depths of LOC layer
+    typematch   [nn.Module]: TypeMatching Module
+    attn_prob   [float]: Drop-out rate
+    proj_prob   [float]: Drop-out rate
   '''
 
-  def __init__(self, ni, nf, code_matrix, din, dcond, n_heads, mlp_depth, typematch, attn_prob=0, proj_prob=0) -> None:
+  def __init__(self, ni, nf, code_matrix, din, dcond, n_heads, mlp_depth, typematch, attn_prob=0, proj_prob=0):
     super().__init__()
     
-    self.locBlocks = []
+    self.LOC_blocks = []
     for i in range(ni):
       # add LOC layer
-      self.locBlocks.append(LOC(code_matrix, din, dcond, n_heads, mlp_depth, typematch))
+      self.LOC_blocks.append(LOC(code_matrix, din, dcond, n_heads, mlp_depth, typematch))
       
-    self.locBlocks = nn.Sequential(*self.locBlocks)
+    self.LOC_blocks = nn.Sequential(*self.LOC_blocks)
   
   def forward(self, x):
-    x = self.locBlocks(x)
+    x = self.LOC_blocks(x)
+    return x
     
 
 # class NeuralInterpreter()
