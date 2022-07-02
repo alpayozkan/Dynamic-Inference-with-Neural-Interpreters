@@ -311,30 +311,36 @@ class LOC(nn.Module):
     compat_matrix = self.typematch(x)
     # x = x.squeeze()
     x_norm = self.norm1(x)
-
-    
     a_hat = self.modattn(x_norm, compat_matrix)
+    
     compat_matrix = compat_matrix.unsqueeze(-1)
     a = x.unsqueeze(1) + compat_matrix*a_hat
     
     b_hat = self.modmlp(self.norm2(a))
     y = a + compat_matrix*b_hat
-
+    
+    # pool-LOC => eqn-11
+    y = x + torch.sum(compat_matrix*y, dim=1)
     return y
 
 
 class Script(nn.Module):
   '''
   Script blocks composed of LOC blocks
-  ni: number of 
+  Assumption:
+    LOC is composed of 1 layer.
+  ni: number of function iterations in a script
+  nf: number of functions per iteration
   '''
-  def __init__(self, ni, nf, code_matrix, din, dcond, n_heads, mlp_depth, attn_prob=0, proj_prob=0) -> None:
+
+  def __init__(self, ni, nf, code_matrix, din, dcond, n_heads, mlp_depth, typematch, attn_prob=0, proj_prob=0) -> None:
     super().__init__()
     
     self.locBlocks = []
     for i in range(ni):
-      self.locBlocks.append(LOC(code_matrix, din, dcond, n_heads, mlp_depth))
-    
+      # add LOC layer
+      self.locBlocks.append(LOC(code_matrix, din, dcond, n_heads, mlp_depth, typematch))
+      
     self.locBlocks = nn.Sequential(*self.locBlocks)
   
   def forward(self, x):
