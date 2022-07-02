@@ -234,40 +234,61 @@ class ModMLP(nn.Module):
       out = self.modlin_blocks(x)
       return out
 
-
+  
 class ModAttn(nn.Module):
   '''
-  Self-Attention Module that uses ModLin2D layer for constructing Q, K, V matrices.
+  Parallelized Self-Attention Layer. 
   
   Args:
   ----
-    code_matrix [Tensor(dcond x nf)]: Consists of code vectors associated with each `function`
-    din         [int]:   Dimension of Embeddings
-    dcond       [int]:   Dimension of individual code vectors associated with each function
-    n_heads     [int]:   Number of attention heads 
-    attn_prob   [float]: Dropout probability
-    compat_matrix [Tensor(nf x ntoken)]: compatibility matrix for each func and each token
+    code_matrix [Tensor(dcond x nf)]: Code matrix of a all `function`s.
+    din         [int]: Dimension of the input  projection
+    dcond       [int]: Dimension of the code vector
+    n_heads     [int]: Number of attention heads
+    attn_prob   [float]: Drop-out rate
+    proj_prob   [float]: Drop-out rate
+  
+  Arguments:
+  ----------
+    qkv:      ModLin Layer to obtain Q, K, V matrices
+    head_dim: Dimension of each attention head
+    scale:    Scale factor of qk_T
+  
+  Returns:
+  --------
+    y: Tensor of size [B x nf x n_token x din]
   '''
-  def __init__(self, code_matrix, din, dcond, n_heads, attn_prob = 0.0):
+  def __init__(self, code_matrix, din, dcond, n_heads, attn_prob = 0.0, proj_prob = 0.0):
     super().__init__()
     self.C = code_matrix
     self.qkv = ModLin2D(code_matrix, 3 * din, din, dcond)
     self.n_heads = n_heads
     self.head_dim = din // n_heads
     self.scale = self.head_dim ** -0.5
+    self.proj = ModLin2D(code_matrix, din, din, dcond)
+    self.attn_drop = nn.Dropout(attn_prob)
+    self.proj_drop = nn.Dropout(proj_prob)
+    # code, dout, din, dcond
 
-  def forward(self, x, compat_matrix):
+  def forward(self, x, compatibility):
     B, N, E = x.shape
     # [768, 128, 5, 64]
     qkv = self.qkv(x).permute(3, 0, 1, 2)
-    qkv = qkv.view(3, self.n_heads, self.head_dim, B, -1, N) 
+    qkv = qkv.view(3, self.n_heads, self.head_dim, B, -1, N) # 3 x 4 x 256 x 128 x 5 x 64
     qkv = qkv.permute(0, 3, 1, 4, 5, 2)
     # B x Heads x nf x tokens x token_dim
     q, k, v = qkv[0], qkv[1], qkv[2]
     qk_t = (q @ k.transpose(-2, -1)) * self.scale
     attn = qk_t.softmax(dim=-1)
-    # DONT FORGET TO SCALE WITH C_ui . C_uj
-    C = torch.matmul(compat_matrix.transpose(1,2), compat_matrix)
-    C = C.unsqueeze(1).unsqueeze(1)
-    out = C*attn
-    return out
+    attn = self.attn_drop(attn)
+
+    # Create compatibility matrix
+    compat_matrix = compatibility.transpose(1, 2) @ compatibility
+    W_hat = attn * compat_matrix.unsqueeze(1).unsqueeze(1)
+    W = W_hat.softmax(dim = -1)
+    y_hat = (W @ v).permute(0, 2, 3, 1, 4) # [B x nf x n_tokens x n_heads x head_dim]
+    y_hat = y_hat.flatten(3)  
+    # Mix 
+    y = self.proj(y_hat).squeeze(1)
+    y = self.proj_drop(y)
+    return y
