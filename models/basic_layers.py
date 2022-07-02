@@ -247,7 +247,7 @@ class ModAttn(nn.Module):
   def __init__(self, code_matrix, din, dcond, n_heads, attn_prob = 0.0):
     super().__init__()
     self.C = code_matrix
-    self.qkv = ModLin2D(code, 3 * din, din, dcond)
+    self.qkv = ModLin2D(code_matrix, 3 * din, din, dcond)
     self.n_heads = n_heads
     self.head_dim = din // n_heads
     self.scale = self.head_dim ** -0.5
