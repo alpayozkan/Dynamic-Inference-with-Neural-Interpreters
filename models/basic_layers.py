@@ -195,6 +195,8 @@ class ModLin2D(nn.Module):
       vectors.
       '''  
       out = self.norm(torch.matmul(self.w_c, self.c).T).unsqueeze(1)
+      print(out.shape)
+      print(x.shape)
       out = x * out
       out = torch.matmul(out, self.W.transpose(0, 1))+self.b
       return out
@@ -206,7 +208,7 @@ class ModMLP(nn.Module):
 
   Args:
   ----
-    n_layers [int]: Number of ModLin layers
+    mlp_depth [int]: Number of ModLin layers
     code     [Tensor(dcond x 1)]: Code vector of a `function`.
     dout     [int]: Dimension of the output projection
     din      [int]: Dimension of the input  projection
@@ -217,11 +219,11 @@ class ModMLP(nn.Module):
   -----------
     modlin_blocks [List[ModLin]]: Stack of ModLin layers 
   '''
-  def __init__(self, n_layers, code, dout, din, dcond, activ=nn.GELU):
+  def __init__(self, mlp_depth, code, dout, din, dcond, activ=nn.GELU):
       super().__init__()
       self.modlin_blocks = [ModLin2D(code, dout, din, dcond), activ()]
       
-      for i in range(n_layers-1):
+      for i in range(mlp_depth-1):
         self.modlin_blocks.append(ModLin2D(code, dout, dout, dcond))
         self.modlin_blocks.append(activ())
      
@@ -268,6 +270,7 @@ class ModAttn(nn.Module):
     # code, dout, din, dcond
 
   def forward(self, x, compatibility):
+    print(x.shape)
     B, N, E = x.shape
     # [768, 128, 5, 64]
     qkv = self.qkv(x.unsqueeze(1)).permute(3, 0, 1, 2)
@@ -289,3 +292,23 @@ class ModAttn(nn.Module):
     y = self.proj(y_hat).squeeze(1)
     y = self.proj_drop(y)
     return y
+
+class LOC(nn.Module):
+  '''
+  Line of Code Layer
+  Composed of 1 attention + 1 MLP layers
+  '''
+  def __init__(self, code_matrix, din, dcond, n_heads, mlp_depth, attn_prob=0, proj_prob=0) -> None:
+
+    super().__init__()
+
+    self.norm = torch.nn.LayerNorm(din)
+    self.modattn = ModAttn(code_matrix, din, dcond, n_heads, attn_prob, proj_prob)
+    self.modmlp = ModMLP(mlp_depth, code_matrix, din, din, dcond)
+
+  def forward(self, x, compat_matrix):
+    # x = x.squeeze()
+    x = self.norm(x)
+    x = self.modattn(x, compat_matrix)
+    x = self.modmlp(x)
+    return x
