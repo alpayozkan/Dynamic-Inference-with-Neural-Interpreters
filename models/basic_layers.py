@@ -329,9 +329,13 @@ class Script(nn.Module):
     
     # w_c shared among all functions in a script  
     self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
-    
-    self.register_parameter('funcsign_matrix', nn.Parameter(torch.empty(nf, signature_dim)))
+    nn.init.xavier_normal_(self.w_c)
+
+    # high-entropy & fixed function signature => avoid mode collapse
+    self.register_parameter('funcsign_matrix', nn.Parameter(torch.ones(nf, signature_dim)))
+    nn.init.xavier_normal_(self.funcsign_matrix)
     self.register_parameter('code_matrix', nn.Parameter(torch.empty(code_dim, nf)))
+    nn.init.xavier_normal_(self.code_matrix)
 
     self.typematch = TypeMatching(type_inference, self.funcsign_matrix, threshold)
 
@@ -361,9 +365,13 @@ class NeuralInterpreter(nn.Module):
     # interpreter that is shared among the whole architecture
     # 2 separate interpreters: din->din, din->3.din (qkv attn)
     self.register_parameter('W', nn.Parameter(torch.empty(din, din)))
+    nn.init.xavier_normal_(self.W)
     self.register_parameter('b', nn.Parameter(torch.empty(din)))
+    nn.init.normal_(self.b)
     self.register_parameter('W_qkv', nn.Parameter(torch.empty(3*din, din)))
+    nn.init.xavier_normal_(self.W_qkv)
     self.register_parameter('b_qkv', nn.Parameter(torch.empty(3*din)))
+    nn.init.normal_(self.b_qkv)
 
     # type inference 
     self.type_inference = MLP(din, type_inference_width, signature_dim)
