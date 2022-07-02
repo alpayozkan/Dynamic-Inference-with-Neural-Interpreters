@@ -392,3 +392,23 @@ class NeuralInterpreter(nn.Module):
 
   def forward(self, x):
     return self.scriptBlocks(x)
+
+class NeuralInterpreter_vision(nn.Module):
+  def __init__( self, ns, ni, nf, din, dcond, mlp_depth, nheads,
+                type_inference_width, signature_dim, threshold,  # typematch params
+                code_dim, n_classes=10,
+                attn_prob=0, proj_prob=0, # dropout rate for attention block
+              ) -> None:
+    super().__init__()
+    self.ni_model = NeuralInterpreter( ns, ni, nf, din, dcond, mlp_depth, nheads,
+                  type_inference_width, signature_dim, threshold,  # typematch params
+                  code_dim, 
+                  attn_prob=0, proj_prob=0, # dropout rate for attention block
+                )
+    self.cls_head = nn.Linear(din, n_classes)
+  
+  def forward(self, x):
+    x = self.ni_model(x)
+    x = x[:,0,:] # first cls taken
+    x = self.cls_head(x) # need to generalize for n_cls many cls tokens
+    return x
