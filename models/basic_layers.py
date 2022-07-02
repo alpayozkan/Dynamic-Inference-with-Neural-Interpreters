@@ -195,8 +195,11 @@ class ModLin2D(nn.Module):
       vectors.
       '''  
       out = self.norm(torch.matmul(self.w_c, self.c).T).unsqueeze(1)
+      print(out.shape)
       out = x.unsqueeze(1) * out
+      print(out.shape)
       out = torch.matmul(out, self.W.transpose(0, 1))+self.b
+      print(out.shape)
       return out
    
   
@@ -242,17 +245,18 @@ class ModAttn(nn.Module):
     din         [int]:   Dimension of Embeddings
     dcond       [int]:   Dimension of individual code vectors associated with each function
     n_heads     [int]:   Number of attention heads 
-    attn_prob   [float]: Dropout probability 
+    attn_prob   [float]: Dropout probability
+    compat_matrix [Tensor(nf x ntoken)]: compatibility matrix for each func and each token
   '''
   def __init__(self, code_matrix, din, dcond, n_heads, attn_prob = 0.0):
     super().__init__()
     self.C = code_matrix
-    self.qkv = ModLin2D(code, 3 * din, din, dcond)
+    self.qkv = ModLin2D(code_matrix, 3 * din, din, dcond)
     self.n_heads = n_heads
     self.head_dim = din // n_heads
     self.scale = self.head_dim ** -0.5
 
-  def forward(self, x):
+  def forward(self, x, compat_matrix):
     B, N, E = x.shape
     # [768, 128, 5, 64]
     qkv = self.qkv(x).permute(3, 0, 1, 2)
@@ -263,4 +267,7 @@ class ModAttn(nn.Module):
     qk_t = (q @ k.transpose(-2, -1)) * self.scale
     attn = qk_t.softmax(dim=-1)
     # DONT FORGET TO SCALE WITH C_ui . C_uj
-    return attn.size()
+    C = torch.matmul(compat_matrix.transpose(1,2), compat_matrix)
+    C = C.unsqueeze(1).unsqueeze(1)
+    out = C*attn
+    return out
