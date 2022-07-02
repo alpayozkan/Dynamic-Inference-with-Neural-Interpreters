@@ -129,7 +129,9 @@ class TypeMatching(nn.Module):
 
   def get_compatilibity_score(self, t, s):
     distance = (1 - t @ s.transpose(0, 1))
-    return torch.where(distance > self.threshold, torch.exp(-distance/self.sigma), torch.tensor(0, dtype=torch.float)).transpose(1, 2)
+    M = distance > self.threshold
+    out = torch.exp(-distance/self.sigma)*M
+    return out.transpose(1, 2)
 
 
 class ModLin2D(nn.Module):
