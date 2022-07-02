@@ -18,7 +18,7 @@ class PatchEmbedding(nn.Module):
     projection  [Conv]: Patch extractor
   '''
 
-  def __init__(self, img_size, patch_size, in_channels, embed_dim):
+  def __init__(self, img_size, patch_size, in_channels, embed_dim, n_cls):
     super().__init__()
     self.img_size = img_size
     self.patch_size = patch_size
@@ -30,6 +30,9 @@ class PatchEmbedding(nn.Module):
                                 out_channels = embed_dim, 
                                 kernel_size = patch_size, 
                                 stride = patch_size)
+    
+    self.cls_tokens = nn.Parameter(torch.zeros(1, n_cls, embed_dim))
+    self.pos_embed = nn.Parameter(torch.zeros(1, n_cls + self.n_patches, embed_dim))
   
   def forward(self, x):
     '''
@@ -39,10 +42,14 @@ class PatchEmbedding(nn.Module):
     
     Returns:
     --------
-      projected [Tensor(B x N x E)] where N stands for n_patches & E stands for embed_dim
+      projected [Tensor(B x N + CLS x E)] where N + CLS stands for n_patches + cls tokens & E stands for embed_dim
     '''
-    projected = self.projection(x).flatten(2).transpose(1, 2) 
-    return projected
+    batch_size = x.size(0)
+    x = self.projection(x).flatten(2).transpose(1, 2) 
+    cls_tokens = self.cls_tokens.expand(batch_size, -1, -1)
+    x = torch.cat((cls_tokens, x), dim=1)
+    x = x + self.pos_embed
+    return x
 
 
   
