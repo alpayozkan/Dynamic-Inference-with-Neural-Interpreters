@@ -91,13 +91,14 @@ class TypeMatching(nn.Module):
     2. Compute `Compatibility`
     3. If this compatibility is larger than treshold, permit f_u to access x_i.
   '''
-  def __init__(self, in_features, hidden_features, out_features, treshold):
+  def __init__(self, in_features, hidden_features, out_features, treshold, funcSign):
     super().__init__()
+    self.s = funcSign
     self.treshold = treshold
     self.type_inference = MLP(in_features, hidden_features, out_features)
     self.register_parameter('sigma', nn.Parameter(torch.ones(1)))
 
-  def forward(self, x, s):
+  def forward(self, x):
     '''
     Args:
     -----
@@ -111,7 +112,7 @@ class TypeMatching(nn.Module):
       compatilibity_hat   [Tensor(B x F x N)]: Negative exponentiated version of compatibility score
     '''
     t = self.type_inference(x)
-    compatibility_hat = self.get_compatilibity_score(t, s)
+    compatibility_hat = self.get_compatilibity_score(t, self.s)
     
     # Softmax 
     compatibility_norm = compatibility_hat.sum(dim=1).unsqueeze(1) + 1e-5
@@ -195,8 +196,6 @@ class ModLin2D(nn.Module):
       vectors.
       '''  
       out = self.norm(torch.matmul(self.w_c, self.c).T).unsqueeze(1)
-      print(out.shape)
-      print(x.shape)
       out = x * out
       out = torch.matmul(out, self.W.transpose(0, 1))+self.b
       return out
@@ -270,7 +269,6 @@ class ModAttn(nn.Module):
     # code, dout, din, dcond
 
   def forward(self, x, compatibility):
-    print(x.shape)
     B, N, E = x.shape
     # [768, 128, 5, 64]
     qkv = self.qkv(x.unsqueeze(1)).permute(3, 0, 1, 2)
@@ -298,17 +296,49 @@ class LOC(nn.Module):
   Line of Code Layer
   Composed of 1 attention + 1 MLP layers
   '''
-  def __init__(self, code_matrix, din, dcond, n_heads, mlp_depth, attn_prob=0, proj_prob=0) -> None:
+  def __init__(self, code_matrix, din, dcond, n_heads, mlp_depth, typematch, attn_prob=0, proj_prob=0) -> None:
 
     super().__init__()
 
-    self.norm = torch.nn.LayerNorm(din)
+    self.typematch = typematch
+    self.norm1 = torch.nn.LayerNorm(din)
+    self.norm2 = torch.nn.LayerNorm(din)
+
     self.modattn = ModAttn(code_matrix, din, dcond, n_heads, attn_prob, proj_prob)
     self.modmlp = ModMLP(mlp_depth, code_matrix, din, din, dcond)
 
-  def forward(self, x, compat_matrix):
+  def forward(self, x):
+    compat_matrix = self.typematch(x)
     # x = x.squeeze()
-    x = self.norm(x)
-    x = self.modattn(x, compat_matrix)
-    x = self.modmlp(x)
-    return x
+    x_norm = self.norm1(x)
+
+    
+    a_hat = self.modattn(x_norm, compat_matrix)
+    compat_matrix = compat_matrix.unsqueeze(-1)
+    a = x.unsqueeze(1) + compat_matrix*a_hat
+    
+    b_hat = self.modmlp(self.norm2(a))
+    y = a + compat_matrix*b_hat
+
+    return y
+
+
+class Script(nn.Module):
+  '''
+  Script blocks composed of LOC blocks
+  ni: number of 
+  '''
+  def __init__(self, ni, nf, code_matrix, din, dcond, n_heads, mlp_depth, attn_prob=0, proj_prob=0) -> None:
+    super().__init__()
+    
+    self.locBlocks = []
+    for i in range(ni):
+      self.locBlocks.append(LOC(code_matrix, din, dcond, n_heads, mlp_depth))
+    
+    self.locBlocks = nn.Sequential(*self.locBlocks)
+  
+  def forward(self, x):
+    x = self.locBlocks(x)
+    
+
+# class NeuralInterpreter()
