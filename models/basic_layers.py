@@ -51,7 +51,7 @@ class PatchEmbedding(nn.Module):
     cls_tokens = self.cls_tokens.expand(batch_size, -1, -1)
     x = torch.cat((cls_tokens, x), dim=1)
     x = x + self.pos_embed
-    print('PatchEmbedding x: ', x.isnan().sum())
+    print('PatchEmbedding x: ', x.isnan().sum()>0)
     return x
 
 
@@ -89,7 +89,7 @@ class MLP(nn.Module):
       type_vector [Tensor(B x N x S)] where S stands for signature dimension
     '''
     type_vector = self.net(embeddings)
-    print('type_vector MLP: ', type_vector.isnan().sum())
+    print('type_vector MLP: ', type_vector.isnan().sum()>0)
     return type_vector 
 
   
@@ -122,7 +122,7 @@ class TypeMatching(nn.Module):
       compatilibity_score [Tensor(B x F x N)]: Parallelized computation score of compatibility score. F stands for # Functions.
       compatilibity_hat   [Tensor(B x F x N)]: Negative exponentiated version of compatibility score
     '''
-    print('before x: ', x.isnan().sum())
+    print('before x: ', x.isnan().sum()>0)
     t = self.type_inference(x)
     compatibility_hat = self.get_compatilibity_score(t, self.s)
     
@@ -130,7 +130,7 @@ class TypeMatching(nn.Module):
     compatibility_norm = compatibility_hat.sum(dim=1).unsqueeze(1) + 1e-5
     compatibility = torch.div(compatibility_hat, compatibility_norm)
     
-    print('typematch compatibility: ', compatibility.isnan().sum())
+    print('typematch compatibility: ', compatibility.isnan().sum()>0)
     return compatibility
 
   def get_compatilibity_score(self, t, s):
@@ -144,7 +144,7 @@ class TypeMatching(nn.Module):
     out = torch.exp(-distance/self.sigma)*M
     print(out.mean())
     
-    print('out TypeMatching: ', out.isnan().sum())
+    print('out TypeMatching: ', out.isnan().sum()>0)
 
     return out.transpose(1, 2)
 
@@ -191,7 +191,7 @@ class ModLin2D(nn.Module):
       out = self.norm(torch.matmul(self.w_c, self.c).T).unsqueeze(1)
       out = x * out
       out = torch.matmul(out, self.W.transpose(0, 1))+self.b
-      print('modlin2d out: ', out.isnan().sum())
+      print('modlin2d out: ', out.isnan().sum()>0)
       return out
    
   
@@ -225,7 +225,7 @@ class ModMLP(nn.Module):
   def forward(self, x):
       out = self.modlin_blocks(x)
 
-      print('ModMLP out: ', out.isnan().sum())
+      print('ModMLP out: ', out.isnan().sum()>0)
 
       return out
 
@@ -288,7 +288,7 @@ class ModAttn(nn.Module):
     y = self.proj(y_hat).squeeze(1)
     y = self.proj_drop(y)
  
-    print('modattn y: ', y.isnan().sum())
+    print('modattn y: ', y.isnan().sum()>0)
     return y
 
 class LOC(nn.Module):
@@ -327,7 +327,7 @@ class LOC(nn.Module):
     y = x + torch.sum(compat_matrix*y, dim=1)
 
     
-    print('LOC y: ', y.isnan().sum())
+    print('LOC y: ', y.isnan().sum()>0)
 
     return y
 
@@ -384,7 +384,7 @@ class Script(nn.Module):
   def forward(self, x):
     x = self.locBlocks(x)
     
-    print('script x: ', x.isnan().sum())
+    print('script x: ', x.isnan().sum()>0)
     return x
     
 
