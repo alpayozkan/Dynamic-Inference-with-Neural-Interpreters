@@ -136,7 +136,7 @@ class TypeMatching(nn.Module):
     distance = (1 - t @ s.transpose(0, 1))
     print(distance.mean())
     M = distance > self.threshold
-    print(M.mean())
+    print(M.sum()/M.numel())
     out = torch.exp(-distance/self.sigma)*M
     print(out.mean())
     return out.transpose(1, 2)
