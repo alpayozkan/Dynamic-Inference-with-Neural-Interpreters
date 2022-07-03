@@ -135,14 +135,15 @@ class TypeMatching(nn.Module):
 
   def get_compatilibity_score(self, t, s):
     print('#'*10)
-    print(t.mean())
-    print(s.mean())
+    print('t: ', t.isnan().sum()>0)
+    print('s: ', s.isnan().sum()>0)
     distance = (1 - t @ s.transpose(0, 1))
-    print(distance.mean())
+    print('d: ', d.isnan().sum()>0)
     M = distance > self.threshold
-    print(M.sum()/M.numel())
-    out = torch.exp(-distance/self.sigma)*M
-    print(out.mean())
+    print('M: ', M.isnan().sum()>0)
+    tmp = -distance/self.sigma
+    print('tmp: ', tmp.isnan().sum()>0)
+    out = torch.exp(tmp)*M
     
     print('out TypeMatching: ', out.isnan().sum()>0)
 
