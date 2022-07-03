@@ -26,19 +26,19 @@ import wandb
 # Main Hyperparameters
 img_size = 32                           # Dimension of spatial axes of input images
 patch_size = 4                          # Patch size
-in_channels = 3                         # Dimension of input channels
+in_channels = 1                         # Dimension of input channels
+
 embed_dim = 256                         # Dimension of embeddings
 batch_size = 128                        # Number of batch
-epochs = 100                            # Number of epochs
+epochs = 30                            # Number of epochs
 dim_c = 192                             # Dimension of 'code' vector
 dim_inter = 192                         # Dimension of intermediate feature vector
 
-ns = 1                                  # Number of 'scripts'
+ns = 5                                  # Number of 'scripts'
 ni = 8                                  # Number of 'function' iterations
 nl = 1                                  # Number of LOCs
-nf = 5                                  # Number of 'function's
-
-n_cls = 3                               # Number of CLS tokens
+nf = 10                                  # Number of 'function's
+n_cls = 1                               # Number of CLS tokens
 n_heads = 4                             # Number of heads per LOC
 loc_features = 128                      # Number of features per LOC head
 
@@ -47,6 +47,10 @@ type_inference_width = 192              # Type Inference MLP width
 treshold = 1.4                          # Trunctation Parameter
 signature_dim = 24                      # Dimension of type_space
 
+attn_prob = 0.0                         # Drop-out probability of ModAttn layer
+proj_drop = 0.0                         # Drop-out probability of Projection 
+mlp_depth = 4             
+number_of_class_mnist = 10                         
 # Pretraining Hyperparameters # Dimension of input channels
 frozen_function_codes = False           # Required for pretraining
 frozen_function_signatures = False      # Required for pretraining
@@ -55,6 +59,7 @@ frozen_function_signatures = False      # Required for pretraining
 beta1 = 0.9                             # Adam Optimizer beta1 parameter
 beta2 = 0.999                           # Adam Optimizer beta2 parameter
 lr = 1e-3                               # Learning Rate
+warmup_steps = 20                       # Scheduler warm up steps
 
 
 # In[4]:
