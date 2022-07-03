@@ -145,7 +145,7 @@ criterion = torch.nn.CrossEntropyLoss()
 scheduler = WarmupCosineSchedule(optimizer, warmup_steps=warmup_steps, t_total=epochs)
 
 # log directory => save checkpoints
-LOG_DIR = '/depo/web490/2022/Cutify/assets/data'
+LOG_DIR = '.'
 
 
 # In[ ]:
