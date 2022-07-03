@@ -34,8 +34,8 @@ epochs = 30                            # Number of epochs
 dim_c = 192                             # Dimension of 'code' vector
 dim_inter = 192                         # Dimension of intermediate feature vector
 
-ns = 1                                  # Number of 'scripts'
-ni = 2                                  # Number of 'function' iterations
+ns = 2                                  # Number of 'scripts'
+ni = 4                                  # Number of 'function' iterations
 nl = 1                                  # Number of LOCs
 nf = 5                                  # Number of 'function's
 n_cls = 1                               # Number of CLS tokens

@@ -130,10 +130,15 @@ class TypeMatching(nn.Module):
     return compatibility
 
   def get_compatilibity_score(self, t, s):
+    print('#'*10)
+    print(t.mean())
+    print(s.mean())
     distance = (1 - t @ s.transpose(0, 1))
+    print(distance.mean())
     M = distance > self.threshold
-    print((M.sum()/M.numel())*100)
+    print(M.mean())
     out = torch.exp(-distance/self.sigma)*M
+    print(out.mean())
     return out.transpose(1, 2)
 
 
@@ -343,8 +348,9 @@ class Script(nn.Module):
     nn.init.xavier_normal_(self.w_c)
 
     # high-entropy & fixed function signature => avoid mode collapse
-    self.register_parameter('funcsign_matrix', nn.Parameter(torch.ones(nf, signature_dim)))
-    nn.init.xavier_normal_(self.funcsign_matrix)
+    self.funcsign_matrix = torch.randn((nf, signature_dim)) 
+    # self.register_parameter('funcsign_matrix', nn.Parameter(torch.ones(nf, signature_dim)))
+    # nn.init.xavier_normal_(self.funcsign_matrix)
     self.register_parameter('code_matrix', nn.Parameter(torch.empty(code_dim, nf)))
     nn.init.xavier_normal_(self.code_matrix)
 
