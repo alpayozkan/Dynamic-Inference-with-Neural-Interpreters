@@ -143,6 +143,8 @@ class TypeMatching(nn.Module):
     print('M: ', M.isnan().sum()>0)
     tmp = -distance/self.sigma
     print('tmp: ', tmp.isnan().sum()>0)
+    tmp_exp = torch.exp(tmp)
+    print('tmp_exp: ', tmp_exp.isnan().sum()>0)
     out = torch.exp(tmp)*M
     
     print('out TypeMatching: ', out.isnan().sum()>0)
