@@ -138,7 +138,7 @@ class TypeMatching(nn.Module):
     print('t: ', t.isnan().sum()>0)
     print('s: ', s.isnan().sum()>0)
     distance = (1 - t @ s.transpose(0, 1))
-    print('d: ', d.isnan().sum()>0)
+    print('distance: ', distance.isnan().sum()>0)
     M = distance > self.threshold
     print('M: ', M.isnan().sum()>0)
     tmp = -distance/self.sigma
