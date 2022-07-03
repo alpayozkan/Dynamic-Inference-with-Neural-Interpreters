@@ -51,6 +51,7 @@ class PatchEmbedding(nn.Module):
     cls_tokens = self.cls_tokens.expand(batch_size, -1, -1)
     x = torch.cat((cls_tokens, x), dim=1)
     x = x + self.pos_embed
+    print('PatchEmbedding x: ', x.isnan().sum())
     return x
 
 
@@ -88,6 +89,7 @@ class MLP(nn.Module):
       type_vector [Tensor(B x N x S)] where S stands for signature dimension
     '''
     type_vector = self.net(embeddings)
+    print('type_vector MLP: ', type_vector.isnan().sum())
     return type_vector 
 
   
@@ -120,6 +122,7 @@ class TypeMatching(nn.Module):
       compatilibity_score [Tensor(B x F x N)]: Parallelized computation score of compatibility score. F stands for # Functions.
       compatilibity_hat   [Tensor(B x F x N)]: Negative exponentiated version of compatibility score
     '''
+    print('before x: ', x.isnan().sum())
     t = self.type_inference(x)
     compatibility_hat = self.get_compatilibity_score(t, self.s)
     
@@ -127,6 +130,7 @@ class TypeMatching(nn.Module):
     compatibility_norm = compatibility_hat.sum(dim=1).unsqueeze(1) + 1e-5
     compatibility = torch.div(compatibility_hat, compatibility_norm)
     
+    print('typematch compatibility: ', compatibility.isnan().sum())
     return compatibility
 
   def get_compatilibity_score(self, t, s):
@@ -139,6 +143,9 @@ class TypeMatching(nn.Module):
     print(M.sum()/M.numel())
     out = torch.exp(-distance/self.sigma)*M
     print(out.mean())
+    
+    print('out TypeMatching: ', out.isnan().sum())
+
     return out.transpose(1, 2)
 
 
@@ -184,6 +191,7 @@ class ModLin2D(nn.Module):
       out = self.norm(torch.matmul(self.w_c, self.c).T).unsqueeze(1)
       out = x * out
       out = torch.matmul(out, self.W.transpose(0, 1))+self.b
+      print('modlin2d out: ', out.isnan().sum())
       return out
    
   
@@ -216,6 +224,9 @@ class ModMLP(nn.Module):
   
   def forward(self, x):
       out = self.modlin_blocks(x)
+
+      print('ModMLP out: ', out.isnan().sum())
+
       return out
 
   
@@ -276,6 +287,8 @@ class ModAttn(nn.Module):
     # Mix 
     y = self.proj(y_hat).squeeze(1)
     y = self.proj_drop(y)
+ 
+    print('modattn y: ', y.isnan().sum())
     return y
 
 class LOC(nn.Module):
@@ -312,6 +325,10 @@ class LOC(nn.Module):
     
     # pool-LOC => eqn-11
     y = x + torch.sum(compat_matrix*y, dim=1)
+
+    
+    print('LOC y: ', y.isnan().sum())
+
     return y
 
 
@@ -348,7 +365,7 @@ class Script(nn.Module):
     nn.init.xavier_normal_(self.w_c)
 
     # high-entropy & fixed function signature => avoid mode collapse
-    self.register_buffer('funcsign_matrix', torch.randn((nf, signature_dim), device='cuda')*100)
+    self.register_buffer('funcsign_matrix', torch.randn((nf, signature_dim), device='cuda')*10)
     # self.register_parameter('funcsign_matrix', nn.Parameter(torch.ones(nf, signature_dim)))
     # nn.init.xavier_normal_(self.funcsign_matrix)
     self.register_parameter('code_matrix', nn.Parameter(torch.randn(code_dim, nf)))
@@ -366,6 +383,8 @@ class Script(nn.Module):
   
   def forward(self, x):
     x = self.locBlocks(x)
+    
+    print('script x: ', x.isnan().sum())
     return x
     
 
