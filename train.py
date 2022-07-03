@@ -5,6 +5,7 @@ import math
 from torch.optim.lr_scheduler import LambdaLR
 
 from tqdm import tqdm
+import os 
 
 class WarmupCosineSchedule(LambdaLR):
     """ Linear warmup and then cosine decay.
@@ -59,6 +60,7 @@ class EarlyStopping:
     def save_checkpoint(self, val_loss, model):
         self.val_loss_min = val_loss
 
+best_acc = 0
 
 def train(net, train_loader, valid_loader, criterion, optimizer, epochs, scheduler, LOG_DIR='.', device='cpu'):
     wandb.watch(net, criterion, log="all", log_freq=10)
@@ -108,9 +110,6 @@ def train(net, train_loader, valid_loader, criterion, optimizer, epochs, schedul
                 train_correct = 0
                 train_total = 0
                 
-                
-                
-
         ##################################= VALIDATION =##################################
         global best_acc
         net.eval()
@@ -121,7 +120,7 @@ def train(net, train_loader, valid_loader, criterion, optimizer, epochs, schedul
 
         with torch.no_grad():
             for batch_idx, (inputs, class_targets) in enumerate(valid_loader):
-                inputs, unc_targets, class_targets = inputs.to(device), class_targets.to(device)
+                inputs, class_targets = inputs.to(device), class_targets.to(device)
                 
                 outputs_class = net(inputs)
 
@@ -155,7 +154,7 @@ def train(net, train_loader, valid_loader, criterion, optimizer, epochs, schedul
         
         visualize_loss = {
                 'valid_loss': valid_loss_class,
-                'train_acc': valid_acc,
+                'valid_acc': valid_acc,
                   }
         wandb.log(visualize_loss, step=epoch)
 
