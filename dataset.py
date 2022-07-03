@@ -63,25 +63,3 @@ def get_data_loader(datasetname, root, batch_size):
         shuffle= True
     )
   return train_loader, test_loader
-
-
-
-def visualize_data(loader):
-  '''
-  Visualize the data in a grid.
-  '''
-  # Get a sample of data
-  samples = next(iter(loader))[0]
-  
-  # Determine grid size
-  grid_width = 8 
-  grid_height = 8
-  
-  # Create the grid
-  image_grid = make_grid(samples[:grid_width*grid_height], nrow=grid_width)
-  
-  # Visualization arrangement
-  plt.rcParams['figure.figsize'] = [grid_height, grid_width]
-  plt.imshow(image_grid.permute(1, 2, 0))
-  plt.axis('off')
-  plt.show()  
