@@ -348,7 +348,7 @@ class Script(nn.Module):
     nn.init.xavier_normal_(self.w_c)
 
     # high-entropy & fixed function signature => avoid mode collapse
-    self.funcsign_matrix = torch.randn((nf, signature_dim)) 
+    self.register_buffer('funcsign_matrix', torch.randn((nf, signature_dim)))
     # self.register_parameter('funcsign_matrix', nn.Parameter(torch.ones(nf, signature_dim)))
     # nn.init.xavier_normal_(self.funcsign_matrix)
     self.register_parameter('code_matrix', nn.Parameter(torch.empty(code_dim, nf)))
