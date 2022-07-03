@@ -28,10 +28,10 @@ img_size = 32                           # Dimension of spatial axes of input ima
 patch_size = 4                          # Patch size
 in_channels = 1                         # Dimension of input channels
 
-embed_dim = 256                         # Dimension of embeddings
-batch_size = 128                        # Number of batch
+embed_dim = 128                         # Dimension of embeddings
+batch_size = 32                        # Number of batch
 epochs = 30                            # Number of epochs
-dim_c = 192                             # Dimension of 'code' vector
+dim_c = 64                             # Dimension of 'code' vector
 dim_inter = 192                         # Dimension of intermediate feature vector
 
 ns = 2                                  # Number of 'scripts'
@@ -44,7 +44,7 @@ loc_features = 128                      # Number of features per LOC head
 
 type_inference_depth = 2                # Type Inference MLP depth
 type_inference_width = 192              # Type Inference MLP width 
-treshold = 1.4                          # Trunctation Parameter
+treshold = 0.5                         # Trunctation Parameter
 signature_dim = 24                      # Dimension of type_space
 
 attn_prob = 0.0                         # Drop-out probability of ModAttn layer
@@ -90,8 +90,8 @@ from dataset import get_data_loader_mixed, get_data_loader_mnist
 
 # Parameters for dataset
 datasetname = 'digits'
-# root = '/depo/web490/2022/Cutify/assets/data/'
-root = 'data/'
+root = '/depo/web490/2022/Cutify/assets/data/'
+# root = 'data/'
 
 batch_size = 64
 train_loader, valid_loader = get_data_loader_mnist(datasetname, root, batch_size)
@@ -145,7 +145,7 @@ criterion = torch.nn.CrossEntropyLoss()
 scheduler = WarmupCosineSchedule(optimizer, warmup_steps=warmup_steps, t_total=epochs)
 
 # log directory => save checkpoints
-LOG_DIR = '.'
+LOG_DIR = '/depo/web490/2022/Cutify/assets/checkpoints_mnist/'
 
 
 # In[ ]:

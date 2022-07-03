@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class PatchEmbedding(nn.Module):
   '''
@@ -51,7 +52,7 @@ class PatchEmbedding(nn.Module):
     cls_tokens = self.cls_tokens.expand(batch_size, -1, -1)
     x = torch.cat((cls_tokens, x), dim=1)
     x = x + self.pos_embed
-    print('PatchEmbedding x: ', x.isnan().sum()>0)
+    # print('PatchEmbedding x: ', x.isnan().sum()>0)
     return x
 
 
@@ -76,7 +77,6 @@ class MLP(nn.Module):
               nn.Linear(in_features, hidden_features),
               nn.GELU(),
               nn.Linear(hidden_features, out_features),
-              nn.Tanh(),
               )
 
   def forward(self, embeddings):
@@ -125,29 +125,47 @@ class TypeMatching(nn.Module):
     '''
     print('before x: ', x.isnan().sum()>0)
     t = self.type_inference(x)
+    print('t: ', t.mean())
+    
     compatibility_hat = self.get_compatilibity_score(t, self.s)
     
-    # Softmax 
-    compatibility_norm = compatibility_hat.sum(dim=1).unsqueeze(1) + 1e-5
+    # Softmax
+    print('compat_hat_shape: ', compatibility_hat.shape)
+    compatibility_norm = compatibility_hat.sum(dim=2).unsqueeze(2) + 1e-5
     compatibility = torch.div(compatibility_hat, compatibility_norm)
     
     print('typematch compatibility: ', compatibility.isnan().sum()>0)
+    print('compatibility_mean: ', compatibility.mean())
+    print('compatibility_nonzero: ', (compatibility!=0).sum())
+    print('compatibility_max: ', compatibility.max())
+    print('compatibility_min: ', compatibility.min())
+
     return compatibility
 
   def get_compatilibity_score(self, t, s):
     print('#'*10)
     print('t: ', t.isnan().sum()>0)
     print('s: ', s.isnan().sum()>0)
+    
     distance = (1 - t @ s.transpose(0, 1))
+    distance = -distance/self.sigma
+    distance = F.softmax(distance, dim=2)
+
     print('distance: ', distance.isnan().sum()>0)
+    print('distance_mean: ', distance.mean())
+
     M = (distance > self.threshold).int()
+    print('M_mean: ', M.float().mean())
     print('M: ', M.isnan().sum()>0)
+
     tmp = -distance/self.sigma
     print('tmp: ', tmp.isnan().sum()>0)
-    tmp_exp = torch.exp(tmp)
-    print('tmp_exp: ', tmp_exp.isnan().sum()>0)
-    out = torch.exp(tmp)*M
-    
+    # tmp_exp = torch.exp(tmp)
+    # print('tmp_exp: ', tmp_exp.isnan().sum()>0)
+    # out = torch.exp(tmp)*M
+    out = distance*M
+    print('out_mean: ', out.mean())
+
     print('out TypeMatching: ', out.isnan().sum()>0)
 
     return out.transpose(1, 2)
@@ -174,13 +192,19 @@ class ModLin2D(nn.Module):
     def __init__(self, code, dout, din, dcond, w_c, W, b):
       super().__init__()
       self.c = code
+      self.register_parameter('w_c', nn.Parameter(torch.randn_like(w_c)))
+      self.register_parameter('W', nn.Parameter(torch.randn_like(W)))
+      self.register_parameter('b', nn.Parameter(torch.randn_like(b)))
+
+      # self.w_c.data = w_c.data.clone()
       
-      self.w_c = w_c
+      # self.w_c = w_c
       # self.register_parameter('w_c', nn.Parameter(torch.empty(din, dcond)))
       
       # interpreter
-      self.b = b
-      self.W = W
+      # self.b = b
+      # self.W = W
+
       # self.register_parameter('b', nn.Parameter(torch.empty(dout)))
       # self.register_parameter('W', nn.Parameter(torch.empty(dout, din)))
       
@@ -191,7 +215,8 @@ class ModLin2D(nn.Module):
       Performs linear projection of embeddings in `din` dimensional space onto
       `dout` dimensional space by fusing [conditioning] embeddings [x] with normalized `code`
       vectors.
-      '''  
+      ''' 
+      print('w_c modlin2d: ', self.w_c.mean())
       out = self.norm(torch.matmul(self.w_c, self.c).T).unsqueeze(1)
       out = x * out
       out = torch.matmul(out, self.W.transpose(0, 1))+self.b
@@ -220,6 +245,8 @@ class ModMLP(nn.Module):
       super().__init__()
       self.modlin_blocks = [ModLin2D(code, dout, din, dcond, w_c, W, b), activ()]
       
+      print('w_c modmlp: ', w_c.mean())
+
       for i in range(mlp_depth-1):
         self.modlin_blocks.append(ModLin2D(code, dout, dout, dcond, w_c, W, b))
         self.modlin_blocks.append(activ())
@@ -265,6 +292,8 @@ class ModAttn(nn.Module):
     self.n_heads = n_heads
     self.head_dim = din // n_heads
     self.scale = self.head_dim ** -0.5
+    
+    print('w_c modattn: ', w_c.mean())
     self.proj = ModLin2D(code_matrix, din, din, dcond, w_c, W, b)
     self.attn_drop = nn.Dropout(attn_prob)
     self.proj_drop = nn.Dropout(proj_prob)
@@ -308,6 +337,7 @@ class LOC(nn.Module):
     self.typematch = typematch
     self.norm1 = torch.nn.LayerNorm(din)
     self.norm2 = torch.nn.LayerNorm(din)
+    print('w_c LOC: ', w_c.mean())
 
     self.modattn = ModAttn( code_matrix, din, dcond, n_heads, 
                             w_c, W, b, W_qkv, b_qkv,
@@ -366,8 +396,11 @@ class Script(nn.Module):
     
     # w_c shared among all functions in a script  
     self.register_parameter('w_c', nn.Parameter(torch.randn(din, dcond)))
+    print('w_c script init rand: ', self.w_c)
     nn.init.xavier_normal_(self.w_c)
-
+    print('w_c script init xavier: ', self.w_c)
+    print('w_c script init xavier: ', self.w_c.mean())
+    
     # high-entropy & fixed function signature => avoid mode collapse
     self.register_buffer('funcsign_matrix', torch.randn((nf, signature_dim), device='cuda')*10)
     # self.register_parameter('funcsign_matrix', nn.Parameter(torch.ones(nf, signature_dim)))
