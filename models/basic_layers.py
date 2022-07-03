@@ -234,8 +234,19 @@ class ModAttn(nn.Module):
   --------
     y: Tensor of size [B x nf x n_token x din]
   '''
-  def __init__(self,  code_matrix, din, dcond, n_heads, w_c, W, b, W_qkv, b_qkv, 
-                      attn_prob = 0.0, proj_prob = 0.0):
+  def __init__(self, 
+              code_matrix, 
+              din, 
+              dcond, 
+              n_heads, 
+              w_c, 
+              W, 
+              b, 
+              W_qkv, 
+              b_qkv, 
+              attn_prob = 0.0, 
+              proj_prob = 0.0):
+
     super().__init__()
     self.C = code_matrix
     self.qkv = ModLin2D(code_matrix, 3 * din, din, dcond, w_c, W_qkv, b_qkv)
@@ -272,11 +283,39 @@ class ModAttn(nn.Module):
 
 class LOC(nn.Module):
   '''
-  Line of Code Layer
-  Composed of 1 attention + 1 MLP layers
+  Line of Code Layer Composed of 1 attention + 1 MLP layers
+
+  Args:
+  -----
+    code_matrix [Tensor()]:  Code matrix of a all `function`s.
+    din         [int]:       Dimension of the input  projection
+    dcond       [int]:       Dimension of the code vector
+    n_heads     [int]:       Number of attention heads
+    mlp_depth   [int]:       Number of MLP depths of LOC layer
+    typematch   [nn.Module]: TypeMatching Module
+    w_c         [Tensor()]:  Projection Matrix of `code` vector
+    W           [Tensor()]:  Projection Matrix of Fusion operation 
+    b           [Tensor()]:  Bias vector of Fusion operation
+    W_qkv       [Tensor()]:  Weight matrix 
+    b_qkv       [Tensor()]:  Bias vector
+    attn_prob   [float]:     Drop-out rate
+    proj_prob   [float]:     Drop-out rate
+
   '''
-  def __init__( self, code_matrix, din, dcond, n_heads, mlp_depth, typematch, w_c, W, b, W_qkv, b_qkv,
-                attn_prob=0, proj_prob=0) -> None:
+  def __init__( self, 
+                code_matrix, 
+                din, 
+                dcond, 
+                n_heads, 
+                mlp_depth, 
+                typematch, 
+                w_c, 
+                W, 
+                b, 
+                W_qkv, 
+                b_qkv,
+                attn_prob=0, 
+                proj_prob=0):
 
     super().__init__()
 
@@ -284,11 +323,26 @@ class LOC(nn.Module):
     self.norm1 = torch.nn.LayerNorm(din)
     self.norm2 = torch.nn.LayerNorm(din)
 
-    self.modattn = ModAttn( code_matrix, din, dcond, n_heads, 
-                            w_c, W, b, W_qkv, b_qkv,
-                            attn_prob, proj_prob)
-    self.modmlp = ModMLP( mlp_depth, code_matrix, din, din, dcond,
-                          w_c, W, b)
+    self.modattn = ModAttn( code_matrix, 
+                            din, 
+                            dcond, 
+                            n_heads, 
+                            w_c, 
+                            W, 
+                            b, 
+                            W_qkv, 
+                            b_qkv,
+                            attn_prob, 
+                            proj_prob)
+
+    self.modmlp = ModMLP( mlp_depth, 
+                          code_matrix, 
+                          din, 
+                          din, 
+                          dcond,
+                          w_c, 
+                          W, 
+                          b)
 
   def forward(self, x):
     compat_matrix = self.typematch(x)
@@ -317,22 +371,42 @@ class Script(nn.Module):
   
   Args:
   -----
-    ni          [int]: Number of function iterations in a script
-    nf          [int]: Number of functions per iteration
-    code_matrix [Tensor(dcond x nf)]: Code matrix of a all `function`s.
-    din         [int]: Dimension of the input  projection
-    dcond       [int]: Dimension of the code vector
-    n_heads     [int]: Number of attention heads
-    mlp_depth   [int]: Number of MLP depths of LOC layer
-    typematch   [nn.Module]: TypeMatching Module
-    attn_prob   [float]: Drop-out rate
-    proj_prob   [float]: Drop-out rate
+    ni            [int]:       Number of function iterations in a script
+    nf            [int]:       Number of functions per iteration
+    din           [int]:       Dimension of the input  projection
+    dcond         [int]:       Dimension of the code vector
+    n_heads       [int]:       Number of attention heads
+    mlp_depth     [int]:       Number of MLP depths of LOC layer
+    typematch     [nn.Module]: TypeMatching Module
+    treshold      [int]:       Treshold value for routing 
+    code_dim      [int]:       Dimension of `code` vector
+    signature_dim [int]:       Dimension of `signature` vector
+    W             [Tensor()]:  Projection Matrix of Fusion operation 
+    b             [Tensor()]:  Bias vector of Fusion operation
+    W_qkv         [Tensor()]:  Weight matrix 
+    b_qkv         [Tensor()]:  Bias vector
+    attn_prob     [float]:     Drop-out rate
+    proj_prob     [float]:     Drop-out rate
   '''
   
-  def __init__( self, ni, nf, din, dcond, n_heads, mlp_depth, 
-                type_inference, threshold, code_dim, signature_dim,
-                W, b, W_qkv, b_qkv,
-                attn_prob=0, proj_prob=0) -> None:
+  def __init__( self, 
+                ni, 
+                nf, 
+                din, 
+                dcond, 
+                n_heads, 
+                mlp_depth, 
+                type_inference, 
+                threshold, 
+                code_dim, 
+                signature_dim,
+                W, 
+                b, 
+                W_qkv, 
+                b_qkv,
+                attn_prob=0, 
+                proj_prob=0):
+
     super().__init__()
     
     # w_c shared among all functions in a script  
@@ -342,6 +416,7 @@ class Script(nn.Module):
     # high-entropy & fixed function signature => avoid mode collapse
     self.register_parameter('funcsign_matrix', nn.Parameter(torch.ones(nf, signature_dim)))
     nn.init.xavier_normal_(self.funcsign_matrix)
+    
     self.register_parameter('code_matrix', nn.Parameter(torch.empty(code_dim, nf)))
     nn.init.xavier_normal_(self.code_matrix)
 
@@ -350,67 +425,163 @@ class Script(nn.Module):
     self.locBlocks = []
     for i in range(ni):
       # add LOC layer
-      self.locBlocks.append(LOC(self.code_matrix, din, dcond, n_heads, mlp_depth, self.typematch, 
-                                self.w_c, W, b, W_qkv, b_qkv, attn_prob, proj_prob))
+      self.loc_blocks.append(LOC(self.
+                                code_matrix, 
+                                din, 
+                                dcond, 
+                                n_heads, 
+                                mlp_depth, 
+                                self.typematch, 
+                                self.w_c, 
+                                W, 
+                                b, 
+                                W_qkv, 
+                                b_qkv, 
+                                attn_prob, 
+                                proj_prob))
       
-    self.locBlocks = nn.Sequential(*self.locBlocks)
+    self.loc_blocks = nn.Sequential(*self.loc_blocks)
   
   def forward(self, x):
-    x = self.locBlocks(x)
+    x = self.loc_blocks(x)
     return x
     
 
 class NeuralInterpreter(nn.Module):
-  def __init__( self, ns, ni, nf, din, dcond, mlp_depth, nheads,
-                type_inference_width, signature_dim, threshold,  # typematch params
-                code_dim, 
-                attn_prob=0, proj_prob=0, # dropout rate for attention block
-              ) -> None:
-    super().__init__()
-    # Function definition: f = (s,c)
-    # function signature matrix (can be kept fixed or can be learnt, but warning collapse problem
+  '''
+  Neural Interpreter layer that operates the logic
 
-    # interpreter that is shared among the whole architecture
-    # 2 separate interpreters: din->din, din->3.din (qkv attn)
+  Args:
+  -----
+    ns            [int]:       Number of `scripts`
+    ni            [int]:       Number of `function iterations` in a script
+    nf            [int]:       Number of `functions` per iteration
+    din           [int]:       Dimension of the input  projection
+    dcond         [int]:       Dimension of the code vector
+    n_heads       [int]:       Number of attention heads
+    mlp_depth     [int]:       Number of MLP depths of LOC layer
+    treshold      [int]:       Treshold value for routing 
+    code_dim      [int]:       Dimension of `code` vector
+    signature_dim [int]:       Dimension of `signature` vector
+    treshold      [int]:       Treshold value for routing
+    attn_prob     [float]:     Drop-out rate
+    proj_prob     [float]:     Drop-out rate
+  '''
+  
+  def __init__( self, 
+                ns, 
+                ni, 
+                nf, 
+                din, 
+                dcond, 
+                mlp_depth, 
+                nheads,
+                type_inference_width, 
+                signature_dim, 
+                threshold,  
+                code_dim, 
+                attn_prob=0, 
+                proj_prob=0, 
+              ):
+
+    super().__init__()
+    
     self.register_parameter('W', nn.Parameter(torch.empty(din, din)))
     nn.init.xavier_normal_(self.W)
+    
     self.register_parameter('b', nn.Parameter(torch.empty(din)))
     nn.init.normal_(self.b)
+    
     self.register_parameter('W_qkv', nn.Parameter(torch.empty(3*din, din)))
     nn.init.xavier_normal_(self.W_qkv)
+    
     self.register_parameter('b_qkv', nn.Parameter(torch.empty(3*din)))
     nn.init.normal_(self.b_qkv)
 
     # type inference 
     self.type_inference = MLP(din, type_inference_width, signature_dim)
 
-    self.scriptBlocks = []
+    self.script_blocks = []
     for i in range(ns):
-      self.scriptBlocks.append(Script(ni, nf, din, dcond, nheads, 
-                                      mlp_depth, self.type_inference, threshold, code_dim, signature_dim,
-                                      self.W, self.b, self.W_qkv, self.b_qkv,
-                                      attn_prob, proj_prob))
-    self.scriptBlocks = nn.Sequential(*self.scriptBlocks)
+      # Create Script Blocks
+      self.script_blocks.append(Script( ni, 
+                                        nf, 
+                                        din, 
+                                        dcond, 
+                                        nheads, 
+                                        mlp_depth, 
+                                        self.type_inference, 
+                                        threshold, 
+                                        code_dim, 
+                                        signature_dim,
+                                        self.W, 
+                                        self.b, 
+                                        self.W_qkv, 
+                                        self.b_qkv,
+                                        attn_prob,
+                                        proj_prob ))
+
+    self.script_blocks = nn.Sequential(*self.script_blocks)
 
   def forward(self, x):
-    return self.scriptBlocks(x)
+    return self.script_blocks(x)
 
 class NeuralInterpreter_vision(nn.Module):
-  def __init__( self, ns, ni, nf, din, dcond, mlp_depth, nheads,
-                type_inference_width, signature_dim, threshold,  # typematch params
-                code_dim, n_classes=10,
-                attn_prob=0, proj_prob=0, # dropout rate for attention block
-              ) -> None:
+  '''
+
+  Args:
+  -----
+    ns            [int]:       Number of `scripts`
+    ni            [int]:       Number of `function iterations` in a script
+    nf            [int]:       Number of `functions` per iteration
+    din           [int]:       Dimension of the input  projection
+    dcond         [int]:       Dimension of the code vector
+    mlp_depth     [int]:       Number of MLP depths of LOC layer
+    n_heads       [int]:       Number of attention heads
+    signature_dim [int]:       Dimension of `signature` vector
+    treshold      [int]:       Treshold value for routing
+    code_dim      [int]:       Dimension of `code` vector
+    n_classes     [int]:       Number of classification heads
+    attn_prob     [float]:     Drop-out rate
+    proj_prob     [float]:     Drop-out rate
+  '''
+  def __init__( self, 
+                ns, 
+                ni, 
+                nf, 
+                din, 
+                dcond, 
+                mlp_depth, 
+                nheads,
+                type_inference_width, 
+                signature_dim, 
+                threshold, 
+                code_dim, 
+                n_classes=10,
+                attn_prob=0, 
+                proj_prob=0
+              ) 
+
     super().__init__()
-    self.ni_model = NeuralInterpreter( ns, ni, nf, din, dcond, mlp_depth, nheads,
-                  type_inference_width, signature_dim, threshold,  # typematch params
-                  code_dim, 
-                  attn_prob=0, proj_prob=0, # dropout rate for attention block
-                )
+    self.ni_model = NeuralInterpreter( ns, 
+                                       ni, 
+                                       nf, 
+                                       din, 
+                                       dcond, 
+                                       mlp_depth, 
+                                       nheads,
+                                       type_inference_width, 
+                                       signature_dim, 
+                                       threshold,  
+                                       code_dim, 
+                                       attn_prob=0, 
+                                       proj_prob=0)
+
     self.cls_head = nn.Linear(din, n_classes)
   
   def forward(self, x):
     x = self.ni_model(x)
-    x = x[:,0,:] # first cls taken
-    x = self.cls_head(x) # need to generalize for n_cls many cls tokens
+    # first cls taken
+    x = x[:,0,:] 
+    x = self.cls_head(x)
     return x
