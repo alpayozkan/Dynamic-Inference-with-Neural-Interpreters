@@ -75,7 +75,8 @@ class MLP(nn.Module):
     self.net = nn.Sequential(
               nn.Linear(in_features, hidden_features),
               nn.GELU(),
-              nn.Linear(hidden_features, out_features)
+              nn.Linear(hidden_features, out_features),
+              nn.Tanh(),
               )
 
   def forward(self, embeddings):
@@ -139,7 +140,7 @@ class TypeMatching(nn.Module):
     print('s: ', s.isnan().sum()>0)
     distance = (1 - t @ s.transpose(0, 1))
     print('distance: ', distance.isnan().sum()>0)
-    M = distance > self.threshold
+    M = (distance > self.threshold).int()
     print('M: ', M.isnan().sum()>0)
     tmp = -distance/self.sigma
     print('tmp: ', tmp.isnan().sum()>0)
