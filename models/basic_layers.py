@@ -32,8 +32,10 @@ class PatchEmbedding(nn.Module):
                                 stride = patch_size)
     
     self.cls_tokens = nn.Parameter(torch.zeros(1, n_cls, embed_dim))
+    nn.init.xavier_normal_(self.cls_tokens)
     self.pos_embed = nn.Parameter(torch.zeros(1, n_cls + self.n_patches, embed_dim))
-  
+    nn.init.xavier_normal_(self.pos_embed)
+
   def forward(self, x):
     '''
     Args:
@@ -130,6 +132,7 @@ class TypeMatching(nn.Module):
   def get_compatilibity_score(self, t, s):
     distance = (1 - t @ s.transpose(0, 1))
     M = distance > self.threshold
+    print((M.sum()/M.numel())*100)
     out = torch.exp(-distance/self.sigma)*M
     return out.transpose(1, 2)
 
