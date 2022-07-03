@@ -5,7 +5,50 @@ from torchvision import datasets, transforms
 from torchvision.utils import make_grid
 import matplotlib.pyplot as plt
 
-def get_data_loader(datasetname, root, batch_size):
+def get_data_loader_mnist(datasetname, root, batch_size):
+  '''
+  Digits dataset is a combination of three related datasets:
+      MNIST
+  '''
+  if datasetname == 'digits':
+    
+    transform = transforms.Compose([
+              transforms.Resize((32, 32)),
+              transforms.ToTensor(),
+    ])
+
+    # Get the MNIST dataset
+    mnist_train = datasets.MNIST(root=root,
+                                train=True,
+                                transform= transform,
+                                download=True)
+    
+    mnist_valid = datasets.MNIST(root=root,
+                                train=False,
+                                transform = transform,
+                                download=True)
+    
+    # Get the train loader
+    train_loader = DataLoader(
+        mnist_train,
+        batch_size = batch_size,
+        num_workers = 2,
+        pin_memory = True,
+        shuffle= True
+    )
+
+    # Get the test loader
+    test_loader = DataLoader(
+        mnist_valid,
+        batch_size = batch_size,
+        num_workers = 2,
+        pin_memory = True,
+        shuffle= True
+    )
+  return train_loader, test_loader
+
+
+def get_data_loader_mixed(datasetname, root, batch_size):
   '''
   Digits dataset is a combination of three related datasets:
       1. SVHN 
